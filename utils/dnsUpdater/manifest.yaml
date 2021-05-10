@@ -1,0 +1,27 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: dns-updater-cronjob
+  namespace: management
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+            - name: general-volume
+              hostPath:
+                path: "/mnt/general-volume/dns-updater"
+          containers:
+          - name: dns-updater-container
+            image: registry.gitlab.com/nullxx/dns-updater:v0.1.1
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+              - mountPath: "/app/data"
+                name: general-volume
+                readOnly: false
+
+          restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: gitlab-registry-secret
