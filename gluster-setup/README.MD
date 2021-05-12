@@ -1,3 +1,14 @@
+If you want to check the setup of this cluster, check my [last post](https://dev.to/nullxx/raspberry-pi-4b-kubernetes-cluster-3l9a).
+
+As I said in that post, I installed kubernetes with the k3s tool. 
+
+It's cool to deploy stateless applications, but when you need something more complex, **you'll need a persistent volume**. 
+
+K3s comes with [local-path-provisioner](https://github.com/rancher/local-path-provisioner) which is used to create local storages in each node of your cluster. 
+What is the problem? If we are running a simple deployment with multiple replicas and each node needs to store data, we **will realize that each node will save its own data**. No storage will be shared between nodes and we don't want that behavior.
+
+I tried to mount a GlusterFS directly with k8s drivers but I could't make it work. It seems that is a k3s incompatibility problem. So in this tutorial I am going to try another way.
+
 # Cluster info
 
 | host      | IP            |
@@ -35,6 +46,10 @@ ansible all -i hosts.ini -a "sudo modprobe fuse" -b
 
 ```bash
 ansible all -i hosts.ini -a "sudo apt-get install -y xfsprogs glusterfs-server" -b
+```
+** Add glusterd service to startup services **
+```bash
+ansible all -i hosts.ini -a "sudo systemctl enable glusterd" -b
 ```
 
 ```bash
@@ -93,8 +108,42 @@ ansible all -i hosts.ini -a "mkdir -p /mnt/general-volume" -b
 ```
 
 * Mount in all nodes
-```
+```bash
 ansible all -i hosts.ini -a "mount -t glusterfs 192.168.1.100:/brick1 /mnt/general-volume" -b
+```
+### Mount on reboot
+* `/root/mount-volumes.sh`: create this file in all slaves nodes
+
+```bash
+#!/bin/sh
+
+function check_glusterd_running()
+{
+# Explanation of why ps command is used this way:
+# https://stackoverflow.com/questions/9117507/linux-unix-command-to-determine-if-process-is-running
+        if ! ps cax | grep -w '[g]lusterd' > /dev/null 2>&1
+        then
+                echo "ERROR: Glusterd is not running"
+                exit 1
+        fi
+}
+
+while [[ !  -z  $(check_glusterd_running)  ]]; do
+  sleep 1s;
+done
+
+echo "Glusterd is running"
+
+# =====> start volume mounts <======
+mount -t glusterfs 192.168.1.100:/brick1 /mnt/general-volume
+```
+After creating this file on all slave nodes:
+* Create crontab line
+```bash
+sudo crontab -e
+
+# @reboot bash /root/script.sh
+# ^^^^^^^^^^^^ Add this line
 ```
 
 # k8s Manifest example
