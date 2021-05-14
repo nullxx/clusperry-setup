@@ -35,7 +35,9 @@ spec:
           - mountPath: "/data/db"
             name: general-volume
             readOnly: false
+
       volumes:
         - name: general-volume
           hostPath:
             path: /mnt/general-volume/mongo
+            type: DirectoryOrCreate
